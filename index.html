@@ -1,133 +1,203 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Gala VRM</title>
+    <title>Gala en el Expreso Astral</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { margin: 0; background: #1a1a2e; overflow: hidden; }
-        canvas { display: block; }
-        #chat { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%; z-index: 10; }
-        #input { width: 70%; padding: 12px; border-radius: 20px; border: none; font-size: 16px; }
-        #btn { padding: 12px 24px; border-radius: 20px; border: none; background: #8b5cf6; color: white; cursor: pointer; font-size: 16px; }
-        #debug { position: absolute; top: 10px; left: 10px; color: #00ff88; font-family: monospace; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 8px; }
+        body { margin: 0; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; }
+        #c { width: 100%; height: 100vh; display: block; }
+        #ui {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            gap: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 10px;
+        }
+        #input {
+            flex-grow: 1;
+            background: #111;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #btn:hover { background: #45a049; }
+        #debug {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+            max-width: 80%;
+        }
     </style>
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-                "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.8/lib/three-vrm.module.js"
-            }
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+            "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.3/lib/three-vrm.module.js"
         }
+    }
     </script>
 </head>
 <body>
-    <div id="debug">Iniciando escena 3D...</div>
-    <div id="chat">
-        <input id="input" placeholder="Hablale a Gala...">
+    <canvas id="c"></canvas>
+    <div id="debug"></div>
+    <div id="ui">
+        <input id="input" type="text" placeholder="Habla con Gala...">
         <button id="btn">Enviar</button>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { VRMLoaderPlugin } from '@pixiv/three-vrm';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        const debug = document.getElementById('debug');
         const HF_SPACE_URL = "https://ponvt-galaxy-ai.hf.space";
-
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a2e);
-        const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 20);
-        camera.position.set(0, 1.4, 1.5);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 1.0, 0);
-        controls.update();
-
-        const light = new THREE.DirectionalLight(0xffffff, 3);
-        light.position.set(1, 1, 1);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0xffffff, 2));
-
-        const gridHelper = new THREE.GridHelper(10, 10);
-        scene.add(gridHelper);
-
+        const debug = document.getElementById('debug');
         let currentVrm = null;
-        const loader = new GLTFLoader();
-        loader.register(function(parser) { return new VRMLoaderPlugin(parser); });
+        let camera, scene, renderer, controls;
 
-        debug.textContent = "Cargando gala.vrm v1.0...";
-        loader.load(
-            './Gala.vrm',
-            function(gltf) {
-                debug.textContent = "VRM 1.0 cargado. Posicionando camara...";
-                currentVrm = gltf.userData.vrm;
-                scene.add(currentVrm.scene);
-                currentVrm.scene.rotation.y = Math.PI;
+        function showDebug(msg, isError = false) {
+            debug.style.display = 'block';
+            debug.style.color = isError? '#ff5a5a' : '#00ff88';
+            debug.textContent = msg;
+        }
 
-                const box = new THREE.Box3().setFromObject(currentVrm.scene);
-                const size = box.getSize(new THREE.Vector3()).length();
-                const center = box.getCenter(new THREE.Vector3());
-                controls.target.copy(center);
-                camera.position.copy(center);
-                camera.position.z += size * 1.2;
-                camera.position.y += size * 0.2;
-                controls.update();
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 20);
+            camera.position.set(0, 1.3, 2.5);
 
-                debug.textContent = "Gala lista. Usa el mouse para mirar.";
-                setTimeout(function() { debug.style.display = 'none'; }, 4000);
-            },
-            function(progress) {
-                const pct = (progress.loaded / progress.total * 100).toFixed(0);
-                debug.textContent = "Descargando Gala: " + pct + "%";
-            },
-            function(error) {
-                debug.style.color = '#ff5a5a';
-                debug.textContent = "ERROR VRM: " + error.message;
-                console.error(error);
-            }
-        );
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0x000000, 0);
 
-        const clock = new THREE.Clock();
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight.position.set(1, 2, 3);
+            scene.add(dirLight);
+
+            const grid = new THREE.GridHelper(10, 10);
+            scene.add(grid);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 1.0, 0);
+            controls.update();
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
         function animate() {
             requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            if (currentVrm) { currentVrm.update(delta); }
-            controls.update();
+            if (currentVrm) {
+                currentVrm.update(0.016);
+            }
             renderer.render(scene, camera);
         }
-        animate();
+
+        function loadVRM() {
+            showDebug("Descargando Gala...");
+            const loader = new GLTFLoader();
+            loader.register(function(parser) {
+                return new VRMLoaderPlugin(parser);
+            });
+
+            loader.load('./Gala.vrm',
+                function(gltf) {
+                    if (currentVrm) {
+                        scene.remove(currentVrm.scene);
+                    }
+                    currentVrm = gltf.userData.vrm;
+                    scene.add(currentVrm.scene);
+                    showDebug("Gala lista", false);
+                    setTimeout(function() { debug.style.display = 'none'; }, 3000);
+                },
+                function(progress) {
+                    const percent = (progress.loaded / progress.total * 100).toFixed(0);
+                    showDebug("Descargando Gala: " + percent + "%");
+                },
+                function(error) {
+                    console.error(error);
+                    showDebug("Error al cargar Gala: " + error.message, true);
+                }
+            );
+        }
 
         document.getElementById('btn').onclick = async function() {
             const input = document.getElementById('input');
-            const msg = input.value;
+            const msg = input.value.trim();
             if (!msg ||!currentVrm) { return; }
-            const tempMsg = input.value;
+
             input.value = "Gala esta pensando...";
             input.disabled = true;
+
             try {
-                const res = await fetch(HF_SPACE_URL + "/run/predict", {
+                const postRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ data: [tempMsg, []] })
+                    body: JSON.stringify({ data: [msg] })
                 });
-                const data = await res.json();
-                console.log("Gala:", data.data[0]);
+
+                if (!postRes.ok) throw new Error("HF devolvió " + postRes.status);
+                const { event_id } = await postRes.json();
+
+                const getRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder/" + event_id);
+                const textResult = await getRes.text();
+
+                const lines = textResult.split('\n');
+                const dataLine = lines.find(l => l.startsWith('data: '));
+                const respuestaGala = dataLine? JSON.parse(dataLine.substring(6))[0] : "No pude leer la respuesta";
+
+                console.log("Gala:", respuestaGala);
+                showDebug("Gala: " + respuestaGala, false);
+                setTimeout(function() { debug.style.display = 'none'; }, 8000);
+
                 if (currentVrm.expressionManager) {
                     currentVrm.expressionManager.setValue('blink', 1.0);
                     setTimeout(function() { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
                 }
+
             } catch (e) {
                 console.error("Error al hablar con HF:", e);
+                showDebug("Error HF: " + e.message, true);
             } finally {
                 input.value = "";
                 input.disabled = false;
             }
         };
+
+        init();
+        loadVRM();
     </script>
 </body>
 </html>
