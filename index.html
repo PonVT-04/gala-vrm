@@ -82,7 +82,7 @@
             },
             (progress) => {
                 const pct = (progress.loaded / progress.total * 100).toFixed(0);
-                debug.textContent = Descargando Gala: ${pct}%;
+                debug.textContent = "Descargando Gala" + pct + "%";
             },
             (error) => {
                 debug.style.color = '#ff5a5a';
