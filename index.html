@@ -158,6 +158,7 @@
             const msg = input.value.trim();
             if (!msg ||!currentVrm) { return; }
 
+            const tempMsg = msg;
             input.value = "Gala esta pensando...";
             input.disabled = true;
 
@@ -165,18 +166,36 @@
                 const postRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ data: [msg] })
+                    body: JSON.stringify({ data: [tempMsg] })
                 });
 
-                if (!postRes.ok) throw new Error("HF devolvió " + postRes.status);
+                if (!postRes.ok) throw new Error("HF status " + postRes.status + " al iniciar");
                 const { event_id } = await postRes.json();
 
                 const getRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder/" + event_id);
                 const textResult = await getRes.text();
+                console.log("Respuesta cruda HF:", textResult);
+
+                let respuestaGala = null;
 
                 const lines = textResult.split('\n');
-                const dataLine = lines.find(l => l.startsWith('data: '));
-                const respuestaGala = dataLine? JSON.parse(dataLine.substring(6))[0] : "No pude leer la respuesta";
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const dataArray = JSON.parse(line.substring(6));
+                            if (Array.isArray(dataArray) && dataArray.length > 0) {
+                                respuestaGala = dataArray[0];
+                                break;
+                            }
+                        } catch (e) {
+                            console.error("Error parseando JSON de data:", e);
+                        }
+                    }
+                }
+
+                if (respuestaGala === null) {
+                    respuestaGala = "Gala no respondió. Revisá la consola F12.";
+                }
 
                 console.log("Gala:", respuestaGala);
                 showDebug("Gala: " + respuestaGala, false);
@@ -193,6 +212,7 @@
             } finally {
                 input.value = "";
                 input.disabled = false;
+                input.focus();
             }
         };
 
