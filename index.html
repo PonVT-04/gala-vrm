@@ -13,9 +13,9 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/",
-                "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@0.6.7/lib/three-vrm.module.js"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.8/lib/three-vrm.module.js"
             }
         }
     </script>
@@ -30,7 +30,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import { VRM } from '@pixiv/three-vrm';
+        import { VRMLoaderPlugin } from '@pixiv/three-vrm';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         const debug = document.getElementById('debug');
@@ -58,29 +58,28 @@
 
         let currentVrm = null;
         const loader = new GLTFLoader();
+        loader.register(function(parser) { return new VRMLoaderPlugin(parser); });
 
-        debug.textContent = "Cargando gala.vrm...";
+        debug.textContent = "Cargando gala.vrm v1.0...";
         loader.load(
             './gala.vrm',
             function(gltf) {
-                debug.textContent = "VRM cargado. Procesando...";
-                VRM.from(gltf).then(function(vrm) {
-                    currentVrm = vrm;
-                    scene.add(currentVrm.scene);
-                    currentVrm.scene.rotation.y = Math.PI;
+                debug.textContent = "VRM 1.0 cargado. Posicionando camara...";
+                currentVrm = gltf.userData.vrm;
+                scene.add(currentVrm.scene);
+                currentVrm.scene.rotation.y = Math.PI;
 
-                    const box = new THREE.Box3().setFromObject(currentVrm.scene);
-                    const size = box.getSize(new THREE.Vector3()).length();
-                    const center = box.getCenter(new THREE.Vector3());
-                    controls.target.copy(center);
-                    camera.position.copy(center);
-                    camera.position.z += size * 1.2;
-                    camera.position.y += size * 0.2;
-                    controls.update();
+                const box = new THREE.Box3().setFromObject(currentVrm.scene);
+                const size = box.getSize(new THREE.Vector3()).length();
+                const center = box.getCenter(new THREE.Vector3());
+                controls.target.copy(center);
+                camera.position.copy(center);
+                camera.position.z += size * 1.2;
+                camera.position.y += size * 0.2;
+                controls.update();
 
-                    debug.textContent = "Gala lista. Usa el mouse para mirar.";
-                    setTimeout(function() { debug.style.display = 'none'; }, 4000);
-                });
+                debug.textContent = "Gala lista. Usa el mouse para mirar.";
+                setTimeout(function() { debug.style.display = 'none'; }, 4000);
             },
             function(progress) {
                 const pct = (progress.loaded / progress.total * 100).toFixed(0);
@@ -118,8 +117,10 @@
                 });
                 const data = await res.json();
                 console.log("Gala:", data.data[0]);
-                currentVrm.expressionManager.setValue('blink', 1.0);
-                setTimeout(function() { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
+                if (currentVrm.expressionManager) {
+                    currentVrm.expressionManager.setValue('blink', 1.0);
+                    setTimeout(function() { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
+                }
             } catch (e) {
                 console.error("Error al hablar con HF:", e);
             } finally {
