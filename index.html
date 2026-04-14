@@ -169,32 +169,29 @@
                     body: JSON.stringify({ data: [tempMsg] })
                 });
 
-                if (!postRes.ok) throw new Error("HF status " + postRes.status + " al iniciar");
+                if (!postRes.ok) throw new Error("HF status " + postRes.status);
                 const { event_id } = await postRes.json();
 
                 const getRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder/" + event_id);
                 const textResult = await getRes.text();
                 console.log("Respuesta cruda HF:", textResult);
 
-                let respuestaGala = null;
-
+                let respuestaGala = "Gala no respondió. Revisá la consola F12.";
                 const lines = textResult.split('\n');
+
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
-                            const dataArray = JSON.parse(line.substring(6));
-                            if (Array.isArray(dataArray) && dataArray.length > 0) {
-                                respuestaGala = dataArray[0];
+                            const jsonStr = line.substring(6);
+                            const dataArray = JSON.parse(jsonStr);
+                            if (Array.isArray(dataArray) && dataArray.length > 0 && dataArray[0]) {
+                                respuestaGala = String(dataArray[0]);
                                 break;
                             }
                         } catch (e) {
-                            console.error("Error parseando JSON de data:", e);
+                            console.error("Error parseando linea data:", e, line);
                         }
                     }
-                }
-
-                if (respuestaGala === null) {
-                    respuestaGala = "Gala no respondió. Revisá la consola F12.";
                 }
 
                 console.log("Gala:", respuestaGala);
