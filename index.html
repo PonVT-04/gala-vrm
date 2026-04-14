@@ -3,11 +3,12 @@
 <head>
     <title>Gala VRM</title>
     <style>
-        body { margin: 0; background: #1a1a2e; }
+        body { margin: 0; background: #1a1a2e; overflow: hidden; }
         canvas { display: block; }
-        #chat { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%; }
-        #input { width: 70%; padding: 10px; border-radius: 20px; border: none; }
-        #btn { padding: 10px 20px; border-radius: 20px; border: none; background: #8b5cf6; color: white; cursor: pointer; }
+        #chat { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%; z-index: 10; }
+        #input { width: 70%; padding: 12px; border-radius: 20px; border: none; font-size: 16px; }
+        #btn { padding: 12px 24px; border-radius: 20px; border: none; background: #8b5cf6; color: white; cursor: pointer; font-size: 16px; }
+        #debug { position: absolute; top: 10px; left: 10px; color: #00ff88; font-family: monospace; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 8px; }
     </style>
     <script type="importmap">
         {
@@ -20,6 +21,7 @@
     </script>
 </head>
 <body>
+    <div id="debug">Iniciando escena 3D...</div>
     <div id="chat">
         <input id="input" placeholder="Hablale a Gala...">
         <button id="btn">Enviar</button>
@@ -29,64 +31,98 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        // URL de tu Space de HF. Reemplazá PonVT por tu usuario si es distinto.
+        const debug = document.getElementById('debug');
         const HF_SPACE_URL = "https://ponvt-galaxy-ai.hf.space";
 
         const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
         const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 20);
         camera.position.set(0, 1.4, 1.5);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.DirectionalLight(0xffffff, 2);
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1.0, 0);
+        controls.update();
+
+        const light = new THREE.DirectionalLight(0xffffff, 3);
         light.position.set(1, 1, 1);
         scene.add(light);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        scene.add(new THREE.AmbientLight(0xffffff, 2));
+
+        const gridHelper = new THREE.GridHelper(10, 10);
+        scene.add(gridHelper);
 
         let currentVrm;
         const loader = new GLTFLoader();
         loader.register((parser) => new VRMLoaderPlugin(parser));
-        loader.load('./gala.vrm', (gltf) => {
-            currentVrm = gltf.userData.vrm;
-            scene.add(currentVrm.scene);
-            currentVrm.scene.rotation.y = Math.PI; // Que mire a la cámara
-        });
+
+        debug.textContent = "Cargando gala.vrm...";
+        loader.load('./gala.vrm',
+            (gltf) => {
+                debug.textContent = "¡VRM cargado! Posicionando cámara...";
+                currentVrm = gltf.userData.vrm;
+                scene.add(currentVrm.scene);
+                currentVrm.scene.rotation.y = Math.PI;
+
+                const box = new THREE.Box3().setFromObject(currentVrm.scene);
+                const size = box.getSize(new THREE.Vector3()).length();
+                const center = box.getCenter(new THREE.Vector3());
+                controls.target.copy(center);
+                camera.position.copy(center);
+                camera.position.z += size * 1.2;
+                camera.position.y += size * 0.2;
+                controls.update();
+
+                debug.textContent = "¡Gala está en escena! Usá el mouse para mirar. 💜";
+                setTimeout(() => { debug.style.display = 'none'; }, 4000);
+            },
+            (progress) => {
+                const pct = (progress.loaded / progress.total * 100).toFixed(0);
+                debug.textContent = Descargando Gala: ${pct}%;
+            },
+            (error) => {
+                debug.style.color = '#ff5a5a';
+                debug.textContent = ERROR VRM: ${error.message}. ¿Es VRM 1.0?;
+                console.error(error);
+            }
+        );
 
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
             if (currentVrm) currentVrm.update(delta);
+            controls.update();
             renderer.render(scene, camera);
         }
         animate();
 
-        // Chat con el backend de HF
         document.getElementById('btn').onclick = async () => {
             const input = document.getElementById('input');
             const msg = input.value;
-            if (!msg) return;
+            if (!msg ||!currentVrm) return;
+            const tempMsg = input.value;
             input.value = "Gala está pensando...";
-
+            input.disabled = true;
             try {
                 const res = await fetch(${HF_SPACE_URL}/run/predict, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ data: [msg, []] })
+                    body: JSON.stringify({ data: [tempMsg, []] })
                 });
                 const data = await res.json();
-                const respuesta = data.data[0];
-                input.value = "";
-                // Acá después le metemos lipsync. Por ahora solo log.
-                console.log("Gala:", respuesta);
-                // Simple blink para que no quede quieta
-                if (currentVrm) currentVrm.expressionManager.setValue('blink', 1.0);
-                setTimeout(() => { if (currentVrm) currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
-
+                console.log("Gala:", data.data[0]);
+                currentVrm.expressionManager.setValue('blink', 1.0);
+                setTimeout(() => { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
             } catch (e) {
-                input.value = "Error: No pude hablar con el cerebro de Gala :(";
+                console.error("Error al hablar con HF:", e);
+            } finally {
+                input.value = "";
+                input.disabled = false;
             }
         };
     </script>
