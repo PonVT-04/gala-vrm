@@ -166,7 +166,7 @@
                 const postRes = await fetch(HF_SPACE_URL + "/gradio_api/call/responder", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ data: [tempMsg] })
+                    body: JSON.stringify({ data: [tempMsg, []] })
                 });
 
                 if (!postRes.ok) throw new Error("HF status " + postRes.status);
@@ -176,9 +176,17 @@
                 const textResult = await getRes.text();
                 console.log("Respuesta cruda HF:", textResult);
 
-                let respuestaGala = "Gala no respondió. Revisá la consola F12.";
+                let respuestaGala = null;
                 const lines = textResult.split('\n');
 
+                // 1. Detectar si HF devolvió error
+                const errorLine = lines.find(l => l.startsWith('event: error'));
+                if (errorLine) {
+                    const dataErrorLine = lines.find(l => l.startsWith('data: '));
+                    throw new Error("El Space devolvió error: " + (dataErrorLine? dataErrorLine : "sin detalles"));
+                }
+
+                // 2. Buscar la respuesta normal
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
@@ -194,6 +202,10 @@
                     }
                 }
 
+                if (respuestaGala === null) {
+                    throw new Error("Gala no devolvió datos. Respuesta: " + textResult);
+                }
+
                 console.log("Gala:", respuestaGala);
                 showDebug("Gala: " + respuestaGala, false);
                 setTimeout(function() { debug.style.display = 'none'; }, 8000);
@@ -205,7 +217,7 @@
 
             } catch (e) {
                 console.error("Error al hablar con HF:", e);
-                showDebug("Error HF: " + e.message, true);
+                showDebug("Error: " + e.message, true);
             } finally {
                 input.value = "";
                 input.disabled = false;
