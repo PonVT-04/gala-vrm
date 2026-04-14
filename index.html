@@ -56,14 +56,15 @@
         const gridHelper = new THREE.GridHelper(10, 10);
         scene.add(gridHelper);
 
-        let currentVrm;
+        let currentVrm = null;
         const loader = new GLTFLoader();
-        loader.register((parser) => new VRMLoaderPlugin(parser));
+        loader.register(function(parser) { return new VRMLoaderPlugin(parser); });
 
         debug.textContent = "Cargando gala.vrm...";
-        loader.load('./gala.vrm',
-            (gltf) => {
-                debug.textContent = "¡VRM cargado! Posicionando cámara...";
+        loader.load(
+            './gala.vrm',
+            function(gltf) {
+                debug.textContent = "VRM cargado. Posicionando camara...";
                 currentVrm = gltf.userData.vrm;
                 scene.add(currentVrm.scene);
                 currentVrm.scene.rotation.y = Math.PI;
@@ -77,16 +78,16 @@
                 camera.position.y += size * 0.2;
                 controls.update();
 
-                debug.textContent = "¡Gala está en escena! Usá el mouse para mirar. 💜";
-                setTimeout(() => { debug.style.display = 'none'; }, 4000);
+                debug.textContent = "Gala lista. Usa el mouse para mirar.";
+                setTimeout(function() { debug.style.display = 'none'; }, 4000);
             },
-            (progress) => {
+            function(progress) {
                 const pct = (progress.loaded / progress.total * 100).toFixed(0);
-                debug.textContent = "Descargando Gala" + pct + "%";
+                debug.textContent = "Descargando Gala: " + pct + "%";
             },
-            (error) => {
+            function(error) {
                 debug.style.color = '#ff5a5a';
-                debug.textContent = "ERROR VRM "+error.message;
+                debug.textContent = "ERROR VRM: " + error.message;
                 console.error(error);
             }
         );
@@ -95,21 +96,21 @@
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
-            if (currentVrm) currentVrm.update(delta);
+            if (currentVrm) { currentVrm.update(delta); }
             controls.update();
             renderer.render(scene, camera);
         }
         animate();
 
-        document.getElementById('btn').onclick = async () => {
+        document.getElementById('btn').onclick = async function() {
             const input = document.getElementById('input');
             const msg = input.value;
-            if (!msg ||!currentVrm) return;
+            if (!msg ||!currentVrm) { return; }
             const tempMsg = input.value;
-            input.value = "Gala está pensando...";
+            input.value = "Gala esta pensando...";
             input.disabled = true;
             try {
-                const res = await fetch(${HF_SPACE_URL}/run/predict, {
+                const res = await fetch(HF_SPACE_URL + "/run/predict", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ data: [tempMsg, []] })
@@ -117,7 +118,7 @@
                 const data = await res.json();
                 console.log("Gala:", data.data[0]);
                 currentVrm.expressionManager.setValue('blink', 1.0);
-                setTimeout(() => { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
+                setTimeout(function() { currentVrm.expressionManager.setValue('blink', 0.0); }, 200);
             } catch (e) {
                 console.error("Error al hablar con HF:", e);
             } finally {
